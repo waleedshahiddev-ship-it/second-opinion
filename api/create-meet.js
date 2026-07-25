@@ -1,32 +1,35 @@
 const { google } = require('googleapis');
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+module.exports = async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
 
   const { event_title, start_datetime, end_datetime, unique_request_id } = req.body;
 
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    },
-    scopes: ['https://www.googleapis.com/auth/calendar'],
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET
+  );
+
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
   });
 
-  const calendar = google.calendar({ version: 'v3', auth });
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
   try {
     const response = await calendar.events.insert({
-      calendarId: process.env.MASTER_CALENDAR_ID,
+      calendarId: process.env.MASTER_CALENDAR_ID, // usually 'primary' for personal accounts
       conferenceDataVersion: 1,
       requestBody: {
-        summary: event_title,
+        summary: event_title || 'Consultation Meeting',
         description: '1-on-1 Consultation via Second Opinion',
         start: { dateTime: start_datetime },
         end: { dateTime: end_datetime },
         conferenceData: {
           createRequest: {
-            requestId: unique_request_id,
+            requestId: unique_request_id || `req_${Date.now()}`,
             conferenceSolutionKey: { type: 'hangoutsMeet' },
           },
         },
@@ -40,4 +43,4 @@ export default async function handler(req, res) {
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }
-}
+};
